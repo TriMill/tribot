@@ -142,11 +142,16 @@ pub async fn run_command(ctx: &Context, msg: &Message, state: &mut State) -> com
         "unban" if sender_admin => ban_unban(ctx, msg, state, false).await,
         "activity" if sender_admin => activity(ctx, msg, rest).await,
         "status" if sender_admin => status(ctx, msg, rest).await,
-        "ban" | "unban" | "force_save" | "stop" | "restart" | "activity" | "status"
+        "add" if sender_admin => add_cmd(rest, state).await,
+        "rm" if sender_admin => rm_cmd(rest, state).await,
+        "ban" | "unban" | "force_save" | "stop" | "restart"
+            | "activity" | "status" | "add" | "rm"
             => no_perms(ctx, msg).await,
         "version" => version(ctx, msg).await,
         "say" => say(ctx, msg, rest).await,
         "ping" => ping(ctx, msg).await,
+        "count" => count(ctx, msg, state).await,
+        "counttop" => counttop(ctx, msg, state).await,
         "roll" => roll(ctx, msg, rest).await,
         "8ball" => eightball(ctx, msg, rest).await,
         "wikipedia" => wikipedia(ctx, msg, rest).await,
@@ -156,7 +161,13 @@ pub async fn run_command(ctx: &Context, msg: &Message, state: &mut State) -> com
         "poll" => poll(ctx, msg, rest).await,
         "help" if rest == "" => send_help(ctx, msg).await,
         "help" => send_help_command(ctx, msg, rest).await,
-        _ => bad_command(ctx, msg).await,
+        _ => match state.run_custom_cmd(cmd) {
+            Some(x) => {
+                msg.channel_id.say(&ctx.http, format!("{}: {}", msg.author.name, x)).await?;
+                Ok(None)
+            }
+            None => bad_command(ctx, msg).await
+        }
     }
 }
 

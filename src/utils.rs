@@ -4,6 +4,7 @@ pub const POLL_COLOR: u32 = 0x225599;
 pub const HELP_COLOR: u32 = 0x228844;
 pub const WEB_COLOR: u32 = 0x339988;
 
+
 pub const NUM_EMOJIS: &[&str] = &[
     "0\u{FE0F}\u{20E3}", 
     "1\u{FE0F}\u{20E3}", 
@@ -16,6 +17,21 @@ pub const NUM_EMOJIS: &[&str] = &[
     "8\u{FE0F}\u{20E3}", 
     "9\u{FE0F}\u{20E3}", 
 ];
+
+pub fn timeformat(mut millis: u64) -> String {
+    let mut result = String::new();
+    if millis > 60*60*1000 {
+        result += &(millis/(60*60*1000)).to_string();
+        result += "hr ";
+    }
+    if millis > 60*1000 {
+        result += &((millis/(60*1000))%60).to_string();
+        result += "m ";
+        millis %= 60*1000;
+    }
+    result += &format!("{:.3}s", (millis as f64)/1000.);
+    result
+}
 
 #[derive(Debug, Clone)]
 pub struct ErrorBox<T: std::fmt::Debug + Send>(pub T);

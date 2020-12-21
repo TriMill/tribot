@@ -2,7 +2,9 @@ use serenity::model::id::UserId;
 use serenity::prelude::*;
 use serde::{Serialize, Deserialize};
 use std::fs::File;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
+
+const COUNT_TIMEOUT: u64 = 60*60*1000;
 
 pub type StateResult<T> = Result<T,&'static str>;
 
@@ -11,10 +13,13 @@ pub type StateResult<T> = Result<T,&'static str>;
 pub struct State {
     banned: HashSet<UserId>,
     admins: HashSet<UserId>,
+    count: HashMap<UserId, u64>,
+    count_cooldown: HashMap<UserId, u64>,
+    custom_cmds: HashMap<String, String>,
     #[serde(skip)]
     file: Option<String>,
     #[serde(skip)]
-    dirty: bool
+    dirty: bool,
 }
 
 impl TypeMapKey for State { 
@@ -64,6 +69,49 @@ impl State {
 
     pub fn is_banned(&self, user: UserId) -> bool {
         self.banned.contains(&user)
+    }
+    
+    pub fn count_up(&mut self, user: UserId) -> u64 {
+        use std::time::*;
+        use std::convert::TryInto;
+        let cooldown = *self.count_cooldown.entry(user).or_insert(0);
+        let ctime: u64 = SystemTime::now()
+            .duration_since(UNIX_EPOCH).unwrap()
+            .as_millis().try_into().unwrap();
+        if ctime > (cooldown + COUNT_TIMEOUT) {
+            *self.count.entry(user).or_insert(0) += 1;
+            self.dirty = true;
+            self.count_cooldown.insert(user, ctime);
+            0
+        } else {
+            cooldown + COUNT_TIMEOUT - ctime
+        }
+    }
+
+    pub fn get_count(&mut self, user: UserId) -> u64 {
+        *self.count.entry(user).or_insert(0)
+    }
+
+    pub fn get_count_all(&mut self) -> Vec<(UserId, u64)> {
+        let mut sorted = self.count.iter()
+            .map(|(a,b)| (*a,*b))
+            .collect::<Vec<(UserId, u64)>>();
+        sorted.sort_by_key(|(_,a)| u64::MAX-*a);
+        sorted
+    }
+
+    pub fn add_cmd(&mut self, cmd: &str, text: &str) {
+        self.custom_cmds.insert(cmd.to_owned(), text.to_owned());
+        self.dirty = true;
+    }
+
+    pub fn rm_cmd(&mut self, cmd: &str) {
+        self.custom_cmds.remove(cmd);
+        self.dirty = true;
+    }
+
+    pub fn run_custom_cmd(&self, cmd: &str) -> Option<&String> {
+        self.custom_cmds.get(cmd)
     }
 
     pub fn force_dirty(&mut self) {

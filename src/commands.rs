@@ -1,3 +1,4 @@
+use log::info;
 use serenity::prelude::*;
 use serenity::model::prelude::*;
 use itertools::Itertools;
@@ -16,7 +17,7 @@ pub struct Command {
 }
 
 pub static COMMANDS: &[Command] = &[
-    VERSION, SAY, EVAL, ROLL, FLIP, EIGHTBALL, VOTE, POLL, WIKIPEDIA, HELP
+    VERSION, SAY, PING, COUNT, COUNTTOP, EVAL, ROLL, FLIP, EIGHTBALL, VOTE, POLL, WIKIPEDIA, HELP
 ];
 
 pub fn dealias<'a>(name: &'a str) -> &'a str {
@@ -73,6 +74,22 @@ pub async fn status(ctx: &Context, msg: &Message, rest: &str) -> CommandResult {
         "reset" => ctx.reset_presence().await,
         _ => { msg.channel_id.say(&ctx.http, ":x: Invalid status").await?; }
     }
+    Ok(None)
+}
+
+pub async fn add_cmd(rest: &str, state: &mut State) -> CommandResult {
+    let idx = match rest.find(" ") {
+        Some(x) => x,
+        None => return Ok(None)
+    };
+    let name = &rest[..idx];
+    let text = &rest[idx..];
+    state.add_cmd(name, text);
+    Ok(None)
+}
+
+pub async fn rm_cmd(rest: &str, state: &mut State) -> CommandResult {
+    state.rm_cmd(rest);
     Ok(None)
 }
 
@@ -134,6 +151,65 @@ pub async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
     let mtime = msg.timestamp.naive_utc();
     let diff = (now - mtime).num_milliseconds();
     msg.channel_id.say(&ctx.http, format!(":ping_pong: Pong! in {}ms", diff)).await?;
+    Ok(None)
+}
+
+pub static COUNT: Command = Command {
+    short: "Increase your count by 1",
+    aliases: &[],
+    usage: &["count"],
+    description: "Increase your count by 1. This can be done once per hour per user. View the global leaderboard with `;counttop`",
+    examples: &[],
+};
+pub async fn count(ctx: &Context, msg: &Message, state: &mut State) -> CommandResult {
+    match state.count_up(msg.author.id) {
+        0 => msg.channel_id.say(&ctx.http, 
+                format!(":hash: Count increased to {}! You can count again in 1hr.",
+                        state.get_count(msg.author.id))).await?,
+        n => msg.channel_id.say(&ctx.http,
+                format!(":x: You must wait {} before doing that!", 
+                        utils::timeformat(n))).await?
+    };
+    Ok(None)
+}
+
+pub static COUNTTOP: Command = Command {
+    short: "View the top players by count",
+    aliases: &[],
+    usage: &["counttop"],
+    description: "View the top players by count, as well as your place on the leaderboard.",
+    examples: &[],
+};
+pub async fn counttop(ctx: &Context, msg: &Message, state: &mut State) -> CommandResult {
+    let user_count = state.get_count(msg.author.id);
+    let counttop = state.get_count_all();
+    let top10 = counttop.iter().map(|(a,b)| (*a,*b)).take(10).collect::<Vec<(UserId, u64)>>();
+    let mut counttop_fmt = Vec::new();
+
+    for (id, count) in &top10 {
+        let user = ctx.http.get_user((*id).into()).await?;
+        counttop_fmt.push((user.name, count));
+    }
+
+    let mut body = counttop_fmt.into_iter()
+        .enumerate()
+        .map(|(i,(user,count))| 
+             format!("**#{}** {} (**{}**)", i+1, user, count))
+        .collect::<Vec<String>>()
+        .join("\n");
+
+    if top10.iter().find(|&(u,_)| *u == msg.author.id).is_none() {
+        let user_idx = counttop.iter().position(|(u,_)| u == &msg.author.id).unwrap_or(0);
+        body += "\n...\n";
+        body += &format!("**#{}** {}: (**{}**)", 
+                        user_idx+1, msg.author.name, user_count);
+    }
+
+    msg.channel_id.send_message(&ctx.http, |m| m.embed(|e| e
+            .title("Top count (global)")
+            .color(utils::WEB_COLOR)
+            .description(body)
+            )).await?;
     Ok(None)
 }
 
@@ -375,6 +451,8 @@ pub async fn send_help_command(ctx: &Context, msg: &Message, rest: &str) -> Comm
         "version" => VERSION,
         "say" => SAY,
         "ping" => PING,
+        "count" => COUNT,
+        "counttop" => COUNTTOP,
         "roll" => ROLL,
         "flip" => FLIP,
         "eval" => EVAL,
