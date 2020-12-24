@@ -15,9 +15,9 @@ serde_derive = "1.0"
 rand = "0.7"
 itertools = "0.9"
 meval = "0.2"
-reqwest = "0.10"
 chrono = "0.4"
+tokio = { version = "0.2", features = ["macros", "signal"] }
+reqwest = "0.10"
 async-trait = "0.1"
 serenity = { version = "0.9", default-features = false, features = ["client", "gateway", "model", "rustls_backend"] }
-tokio = { version = "0.2", features = ["macros", "signal"] }
 

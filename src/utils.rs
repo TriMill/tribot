@@ -113,30 +113,31 @@ https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exchars=200&explai
 
 https://en.wikipedia.org/w/api.php?action=query&pageids={{ID}}&prop=pageimages&format=json&pithumbsize=100
 */
-const WIKI_API: &str = "https://en.wikipedia.org/w/api.php";
 #[derive(Clone, Debug)]
-pub struct WikipediaResult {
+pub struct EmbedResult {
     pub title: String,
     pub url: String,
     pub text: String,
     pub image_url: Option<String>
 }
 #[derive(Clone, Debug)]
-pub enum WikipediaError {
-    Missing(String), Other(String)
+pub enum EmbedError {
+    Missing(String), Other(String), BadQuery(String)
 }
-pub async fn wikipedia(query: &str) -> Result<WikipediaResult, WikipediaError> {
+
+const WIKI_API: &str = "https://en.wikipedia.org/w/api.php";
+pub async fn wikipedia(query: &str) -> Result<EmbedResult, EmbedError> {
     match wikipedia_inner(query).await {
         Ok(x) => Ok(x),
         Err(e) => {
             match e.downcast::<ErrorBox<&str>>() {
-                Ok(s) => Err(WikipediaError::Missing(format!("{}", s))),
-                Err(e) => Err(WikipediaError::Other(format!("{}", e)))
+                Ok(s) => Err(EmbedError::Missing(format!("{}", s))),
+                Err(e) => Err(EmbedError::Other(format!("{}", e)))
             }
         }
     }
 }
-async fn wikipedia_inner(query: &str) -> Result<WikipediaResult, Box<dyn std::error::Error>> {
+async fn wikipedia_inner(query: &str) -> Result<EmbedResult, Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
     let params = [
         ("action", "query"),
@@ -194,7 +195,7 @@ async fn wikipedia_inner(query: &str) -> Result<WikipediaResult, Box<dyn std::er
         let text = json_text["query"]["pages"][id]["extract"]
             .as_str().ok_or(ErrorBox("Error retrieving page extract"))?;
         let image_url = json_thumbnail["query"]["pages"][id]["thumbnail"]["source"].as_str();
-        Ok(WikipediaResult {
+        Ok(EmbedResult {
             title: title.to_owned(),
             url: url.to_owned(),
             text: text.to_owned(),
@@ -203,4 +204,38 @@ async fn wikipedia_inner(query: &str) -> Result<WikipediaResult, Box<dyn std::er
     } else {
         Err(ErrorBox("No results found"))?
     }
+}
+
+pub async fn xkcd(query: &str) -> Result<EmbedResult, EmbedError> {
+    if query.len() > 0 && query.parse::<u32>().is_err() {
+        return Err(EmbedError::BadQuery("Invalid comic number".to_string()))
+    }
+    match xkcd_inner(query).await {
+        Ok(x) => Ok(x),
+        Err(e) => {
+            match e.downcast::<ErrorBox<&str>>() {
+                Ok(s) => Err(EmbedError::Missing(format!("{}", s))),
+                Err(e) => Err(EmbedError::Other(format!("{}", e)))
+            }
+        }
+    }
+}
+async fn xkcd_inner(query: &str) -> Result<EmbedResult, Box<dyn std::error::Error>> {
+    let client = reqwest::Client::new();
+    let response = client.get(&format!("https://xkcd.com/{}/info.0.json", query))
+        .send()
+        .await?;
+    let json = response
+        .json::<serde_json::Value>()
+        .await?;
+    let url = format!("https://xkcd.com/{}", query);
+    let title = json["title"].as_str().ok_or(ErrorBox("Error retrieving title"))?;
+    let text = json["alt"].as_str().unwrap_or("");
+    let image_url = json["img"].as_str().ok_or(ErrorBox("Error retrieving image"))?;
+    Ok(EmbedResult {
+        title: title.to_owned(),
+        url: url,
+        text: text.to_owned(),
+        image_url: Some(image_url.to_owned())
+    })
 }

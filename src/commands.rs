@@ -1,4 +1,4 @@
-use log::info;
+use log::{debug, warn};
 use serenity::prelude::*;
 use serenity::model::prelude::*;
 use itertools::Itertools;
@@ -17,7 +17,9 @@ pub struct Command {
 }
 
 pub static COMMANDS: &[Command] = &[
-    VERSION, SAY, PING, COUNT, COUNTTOP, EVAL, ROLL, FLIP, EIGHTBALL, VOTE, POLL, WIKIPEDIA, HELP
+    VERSION, SAY, PING, COUNT, COUNTTOP, 
+    EVAL, ROLL, FLIP, EIGHTBALL, 
+    VOTE, POLL, WIKIPEDIA, XKCD, HELP
 ];
 
 pub fn dealias<'a>(name: &'a str) -> &'a str {
@@ -34,6 +36,7 @@ pub fn dealias<'a>(name: &'a str) -> &'a str {
 }
 
 pub async fn shutdown(ctx: &Context, msg: &Message, state: &mut State, code: i32) -> CommandResult {
+    debug!("Shutdown requested by {}#{}", msg.author.name, msg.author.discriminator);
     msg.channel_id.say(&ctx.http, ":wave: Cya!").await?;
     state.force_dirty();
     ctx.invisible().await;
@@ -42,6 +45,7 @@ pub async fn shutdown(ctx: &Context, msg: &Message, state: &mut State, code: i32
 
 pub async fn activity(ctx: &Context, msg: &Message, rest: &str) -> CommandResult {
     if rest == "reset" {
+        debug!("Reset activity");
         ctx.reset_presence().await;
         return Ok(None)
     }
@@ -58,6 +62,7 @@ pub async fn activity(ctx: &Context, msg: &Message, rest: &str) -> CommandResult
                 return Ok(None)
             }
         };
+        debug!("Activity changed: {:?}", activity);
         ctx.set_activity(activity).await;
     } else {
         msg.channel_id.say(&ctx.http, ":x: No activity specified").await?;
@@ -84,11 +89,13 @@ pub async fn add_cmd(rest: &str, state: &mut State) -> CommandResult {
     };
     let name = &rest[..idx];
     let text = &rest[idx..];
+    debug!("Command added: {}", name);
     state.add_cmd(name, text);
     Ok(None)
 }
 
 pub async fn rm_cmd(rest: &str, state: &mut State) -> CommandResult {
+    debug!("Command removed: {}", rest);
     state.rm_cmd(rest);
     Ok(None)
 }
@@ -98,11 +105,17 @@ pub async fn ban_unban(ctx: &Context, msg: &Message, state: &mut State, ban: boo
         let user = &msg.mentions[0];
         let result = match ban {
             true => match state.ban(user.id) {
-                Ok(()) => format!(":crab: Banned {}#{}", user.name, user.discriminator),
+                Ok(()) => {
+                    debug!("User {}#{} banned by {}#{}", user.name, user.discriminator, msg.author.name, msg.author.discriminator);
+                    format!(":crab: Banned {}#{}", user.name, user.discriminator)
+                },
                 Err(e) => format!(":x: {}", e),
             },
             false => match state.unban(user.id) {
-                Ok(()) => format!(":crab: Unbanned {}#{}", user.name, user.discriminator),
+                Ok(()) => {
+                    debug!("User {}#{} unbanned by {}#{}", user.name, user.discriminator, msg.author.name, msg.author.discriminator);
+                    format!(":crab: Unbanned {}#{}", user.name, user.discriminator)
+                },
                 Err(e) => format!(":x: {}", e),
             }
         };
@@ -326,7 +339,72 @@ pub static WIKIPEDIA: Command = Command {
     examples: &[]
 };
 pub async fn wikipedia(ctx: &Context, msg: &Message, rest: &str) -> CommandResult {
-    let result = utils::wikipedia(rest).await;
+    if rest.len() == 0 {
+        msg.channel_id.say(&ctx.http, ":x: No query specified. See `;help wikipedia`").await?;
+        return Ok(None)
+    }
+    let channel_id = msg.channel_id.clone();
+    let context = ctx.clone();
+    let rest = rest.to_owned();
+    tokio::task::spawn(async move {
+        let result = utils::wikipedia(&rest).await;
+        let send_result = if let Ok(res) = result {
+            let result = res.clone();
+            drop(res);
+            channel_id.send_message(&context.http, |m| m.embed(|e| {
+                e.color(utils::WEB_COLOR);
+                e.title(result.title);
+                e.description(result.text);
+                e.url(result.url);
+                e.footer(|x| x.text("From Wikipedia"));
+                if let Some(image) = result.image_url {
+                    e.image(image);
+                }
+                e
+            })).await
+        } else if let Err(err) = result {
+            channel_id.send_message(&context.http, |m| m.embed(|e| {
+                e.color(utils::WEB_COLOR);
+                e.footer(|x| x.text("From Wikipedia"));
+                match err {
+                    utils::EmbedError::Missing(s) => {
+                        if s == "\"No results found\"" {
+                            e.title(format!("No results found for \"{}\"", rest));
+                        } else {
+                            e.title("Error");
+                            e.description(s);
+                        }
+                    },
+                    utils::EmbedError::BadQuery(s) => {
+                        e.title("Bad query");
+                        e.description(s);
+                    },
+                    utils::EmbedError::Other(s) => {
+                        e.title("Wikipedia API error");
+                        e.description(s);
+                    }
+                }
+                e
+            })).await
+        } else {
+            unreachable!()
+        };
+        if let Err(e) = send_result {
+            warn!("Error in Wikipedia async block: {:?}", e);
+        }
+    });
+    Ok(None)
+}
+
+pub static XKCD: Command = Command {
+    short: "View an xkcd comic.",
+    aliases: &[],
+    usage: &["xkcd", "xkcd <number>"],
+    description: "View an xkcd comic, or view the latest comic if no number is provided.",
+    examples: &["xkcd 1481", "xkcd 2021"]
+};
+pub async fn xkcd(ctx: &Context, msg: &Message, rest: &str) -> CommandResult {
+    let result = utils::xkcd(rest).await;
     if let Ok(res) = result {
         let result = res.clone();
         drop(res);
@@ -335,37 +413,23 @@ pub async fn wikipedia(ctx: &Context, msg: &Message, rest: &str) -> CommandResul
             e.title(result.title);
             e.description(result.text);
             e.url(result.url);
-            e.footer(|x| x.text("From Wikipedia"));
-            if let Some(image) = result.image_url {
-                e.image(image);
-            }
+            e.image(result.image_url.unwrap());
+            e.footer(|x| x.text("From XKCD"));
             e
         })).await?;
     } else if let Err(err) = result {
-        msg.channel_id.send_message(&ctx.http, |m| m.embed(|e| {
-            e.color(utils::WEB_COLOR);
-            e.footer(|x| x.text("From Wikipedia"));
-            match err {
-                utils::WikipediaError::Missing(s) => {
-                    if s == "\"No results found\"" {
-                        e.title(format!("No results found for \"{}\"", rest));
-                    } else {
-                        e.title("Error");
-                        e.description(s);
-                    }
-                },
-                utils::WikipediaError::Other(s) => {
-                    e.title("Wikipedia API error");
-                    e.description(s);
-                }
-            }
-            e
-        })).await?;
-        return Ok(None)
+        match err {
+            utils::EmbedError::BadQuery(s) => {
+                msg.channel_id.say(&ctx.http, format!(":x: {}", s)).await?;
+            },
+            utils::EmbedError::Other(s) => {
+                msg.channel_id.say(&ctx.http, format!(":x: XKCD API error: {}", s)).await?;
+            },
+            utils::EmbedError::Missing(_) => {},
+        }
     }
     Ok(None)
 }
-
 pub static VOTE: Command = Command {
     short: "Create a poll with two options",
     aliases: &[],
@@ -459,6 +523,7 @@ pub async fn send_help_command(ctx: &Context, msg: &Message, rest: &str) -> Comm
         "help" => HELP,
         "8ball" => EIGHTBALL,
         "wikipedia" => WIKIPEDIA,
+        "xkcd" => XKCD,
         "vote" => VOTE,
         "poll" => POLL,
         _ => {

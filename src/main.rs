@@ -1,4 +1,3 @@
-//#![feature(async_closure)]
 use log::{info, error};
 use std::env;
 use serenity::{

@@ -61,10 +61,11 @@ impl EventHandler for Handler {
         }
     }
 
-    async fn ready(&self, ctx: Context, _: Ready) {
+    async fn ready(&self, ctx: Context, ready: Ready) {
         ctx.online().await;
         ctx.set_activity(Activity::playing("your mother")).await;
         info!("Ready");
+        info!("Guild count: {}", ready.guilds.len());
     }
 
     async fn reaction_add(&self, ctx: Context, reaction: Reaction) {
@@ -155,6 +156,7 @@ pub async fn run_command(ctx: &Context, msg: &Message, state: &mut State) -> com
         "roll" => roll(ctx, msg, rest).await,
         "8ball" => eightball(ctx, msg, rest).await,
         "wikipedia" => wikipedia(ctx, msg, rest).await,
+        "xkcd" => xkcd(ctx, msg, rest).await,
         "flip" => flip(ctx, msg, rest).await,
         "eval" => eval(ctx, msg, rest).await,
         "vote" => vote(ctx, msg, rest).await,

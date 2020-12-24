@@ -1,3 +1,8 @@
+#!/bin/bash
+
+# Script to run the bot, automatically restarts if the bot 
+# exits with code 5 or 6 (from the ";restart" command)
+
 cd "$(dirname "$0")"
 cd ..
 . secrets/envars.sh

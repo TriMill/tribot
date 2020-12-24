@@ -4,7 +4,7 @@ use serde::{Serialize, Deserialize};
 use std::fs::File;
 use std::collections::{HashSet, HashMap};
 
-const COUNT_TIMEOUT: u64 = 60*60*1000;
+const COUNT_TIMEOUT: u64 = 60*60*1000; // 1hr as millis
 
 pub type StateResult<T> = Result<T,&'static str>;
 
