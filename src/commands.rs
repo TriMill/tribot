@@ -134,7 +134,7 @@ pub static VERSION: Command = Command {
     examples: &[],
 };
 pub async fn version(ctx: &Context, msg: &Message) -> CommandResult {
-    msg.channel_id.say(&ctx.http, "TriBot v0.1 by TriMill#6898").await?;
+    msg.channel_id.say(&ctx.http, "TriBot v0.1 by TriMill#6898\n<https://github.com/trimill/tribot>").await?;
     Ok(None)
 }
 
