@@ -1,10 +1,11 @@
 [package]
 name = "discord_bot"
 version = "0.1.0"
-authors = ["trimill <trimil016@gmail.com>"]
+authors = ["trimill"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "GPL-3"
+repository = "https://github.com/trimill/tribot.git"
+homepage = "https://github.com/trimill/tribot"
 
 [dependencies]
 log = "0.4"
