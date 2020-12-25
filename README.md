@@ -37,6 +37,10 @@ After installing [Rust](https://www.rust-lang.org/), `git clone` this repository
  - `DISCORD_BOT_TOKEN`, your bot's token
  - `DISORD_STATE_FILE`, the path to the file containing the bot's JSON data. Copy `initial_state.json` and add your user ID into the `admins` array.
 
+Optionally, set the following variables to enable the `;meme` command (using the ImgFlip API):
+ - `IMGFLIP_USER`, your ImgFlip account's username
+ - `IMGFLIP_PASSWD`, the account password
+
 The bot includes the `;restart` command to restart it in place. To use this, create the folder `secrets` in the bot's root directory. Inside it, create the following files:
 
  - `envars.sh`: a bash script that sets the environment variables

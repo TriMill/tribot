@@ -108,11 +108,6 @@ pub fn eight_ball() -> &'static str {
 }
 
 
-/*
-https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exchars=200&explaintext&pageids={{ID}}&format=json
-
-https://en.wikipedia.org/w/api.php?action=query&pageids={{ID}}&prop=pageimages&format=json&pithumbsize=100
-*/
 #[derive(Clone, Debug)]
 pub struct EmbedResult {
     pub title: String,
@@ -125,6 +120,11 @@ pub enum EmbedError {
     Missing(String), Other(String), BadQuery(String)
 }
 
+/*
+https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exchars=200&explaintext&pageids={{ID}}&format=json
+
+https://en.wikipedia.org/w/api.php?action=query&pageids={{ID}}&prop=pageimages&format=json&pithumbsize=100
+*/
 const WIKI_API: &str = "https://en.wikipedia.org/w/api.php";
 pub async fn wikipedia(query: &str) -> Result<EmbedResult, EmbedError> {
     match wikipedia_inner(query).await {
@@ -238,4 +238,70 @@ async fn xkcd_inner(query: &str) -> Result<EmbedResult, Box<dyn std::error::Erro
         text: text.to_owned(),
         image_url: Some(image_url.to_owned())
     })
+}
+
+pub async fn imgflip(query: &str, uname: &str, passwd: &str) -> Result<EmbedResult, EmbedError> {
+    let parts = query.split(";").collect::<Vec<&str>>();
+    if parts.len() < 1 {
+        return Err(EmbedError::Missing("No template name specified".to_owned()))
+    }
+    if parts.len() < 2 {
+        return Err(EmbedError::Missing("At least one text required".to_owned()))
+    }
+    let id: u32 = match parts[0] {
+        "drake" => 181913649,
+        "twobuttons" => 87743020,
+        "changemind" => 129242436,
+        "exitramp" => 124822590,
+        "draw25" => 217743513,
+        "button" => 119139145,
+        "bernie" => 222403160,
+        "handshake" => 135256802,
+        "samepicture" => 180190441,
+        "thisisfine" => 55311130,
+        "truthscroll" => 123999232,
+        _ => return Err(EmbedError::Missing("Incorrect template name".to_owned()))
+    };
+    match imgflip_inner(id, parts[1..].to_vec(), uname, passwd).await {
+        Ok(x) => Ok(x),
+        Err(e) => {
+            match e.downcast::<ErrorBox<&str>>() {
+                Ok(s) => Err(EmbedError::Missing(format!("{}", s))),
+                Err(e) => Err(EmbedError::Other(format!("{}", e)))
+            }
+        }
+    }
+}
+async fn imgflip_inner(id: u32, texts: Vec<&str>, uname: &str, passwd: &str)
+    -> Result<EmbedResult, Box<dyn std::error::Error>> {
+    let client = reqwest::Client::new();
+    let id_str = &id.to_string() as &str;
+    let mut params = vec![
+        ("template_id".to_owned(), id_str),
+        ("username".to_owned(), uname),
+        ("password".to_owned(), passwd)
+    ];
+    for (i, text) in texts.iter().enumerate() {
+        let name = "text".to_owned() + &i.to_string();
+        params.push((name, text));
+    }
+    let json = client.post("https://api.imgflip.com/caption_image")
+        .form(&params)
+        .send()
+        .await?
+        .json::<serde_json::Value>()
+        .await?;
+    if json["success"].as_bool() == Some(true) {
+        let url = json["data"]["page_url"].as_str().ok_or(ErrorBox("Error getting image"))?.to_owned();
+        let image_url = json["data"]["url"].as_str().ok_or(ErrorBox("Error getting image"))?.to_owned();
+        Ok(EmbedResult {
+            url,
+            image_url: Some(image_url),
+            title: String::new(),
+            text: String::new(),
+        })
+    } else {
+        let failure = json["error_message"].as_str().unwrap_or("Unknown error").to_owned();
+        Err(ErrorBox(failure))?
+    }
 }

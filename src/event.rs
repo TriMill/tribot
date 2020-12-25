@@ -157,6 +157,7 @@ pub async fn run_command(ctx: &Context, msg: &Message, state: &mut State) -> com
         "8ball" => eightball(ctx, msg, rest).await,
         "wikipedia" => wikipedia(ctx, msg, rest).await,
         "xkcd" => xkcd(ctx, msg, rest).await,
+        "meme" => meme(ctx, msg, rest).await,
         "flip" => flip(ctx, msg, rest).await,
         "eval" => eval(ctx, msg, rest).await,
         "vote" => vote(ctx, msg, rest).await,

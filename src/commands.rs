@@ -1,4 +1,5 @@
 use log::{debug, warn};
+use std::env;
 use serenity::prelude::*;
 use serenity::model::prelude::*;
 use itertools::Itertools;
@@ -19,7 +20,7 @@ pub struct Command {
 pub static COMMANDS: &[Command] = &[
     VERSION, SAY, PING, COUNT, COUNTTOP, 
     EVAL, ROLL, FLIP, EIGHTBALL, 
-    VOTE, POLL, WIKIPEDIA, XKCD, HELP
+    VOTE, POLL, WIKIPEDIA, XKCD, MEME, HELP
 ];
 
 pub fn dealias<'a>(name: &'a str) -> &'a str {
@@ -31,6 +32,7 @@ pub fn dealias<'a>(name: &'a str) -> &'a str {
         "eightball" => "8ball",
         "pong" => "ping",
         "wp" | "wiki" => "wikipedia",
+        "imgflip" => "meme",
         _ => name
     }
 }
@@ -430,6 +432,48 @@ pub async fn xkcd(ctx: &Context, msg: &Message, rest: &str) -> CommandResult {
     }
     Ok(None)
 }
+
+pub static MEME: Command = Command {
+    short: "Generate a meme using ImgFlip",
+    aliases: &["imgflip"],
+    usage: &["meme <template>;<text>", "meme <template>;<top>;<bottom>"],
+    description: "Generate a meme using <https://imgflip.com/>. The first argument is the template name, the next two are the top and bottom text, respectively. Supported template names: `drake`, `twobuttons`, `changemind`, `exitramp`, `draw25`, `button`, `bernie`, `handshake`, `samepicture`, `thisisfine`, `truthscroll`",
+    examples: &["imgflip drake; creating memes manually; using a discord bot"]
+};
+pub async fn meme(ctx: &Context, msg: &Message, rest: &str) -> CommandResult {
+    let uname = env::var("IMGFLIP_USER");
+    let passwd = env::var("IMGFLIP_PASSWD");
+    if uname.is_ok() && passwd.is_ok() {
+        let result = utils::imgflip(rest, &uname.unwrap(), &passwd.unwrap()).await;
+        if let Ok(res) = result {
+            let result = res.clone();
+            drop(res);
+            msg.channel_id.send_message(&ctx.http, |m| m.embed(|e| {
+                e.color(utils::WEB_COLOR);
+                e.url(result.url);
+                e.image(result.image_url.unwrap());
+                e.footer(|x| x.text("Generated with ImgFlip"));
+                e
+            })).await?;
+        } else if let Err(err) = result {
+            match err {
+                utils::EmbedError::BadQuery(s) => {
+                    msg.channel_id.say(&ctx.http, format!(":x: Error: {}", s)).await?;
+                },
+                utils::EmbedError::Other(s) => {
+                    msg.channel_id.say(&ctx.http, format!(":x: ImgFlip API error: {}", s)).await?;
+                },
+                utils::EmbedError::Missing(s) => {
+                    msg.channel_id.say(&ctx.http, format!(":x: {}", s)).await?;
+                }
+            }
+        }
+    } else {
+        msg.channel_id.say(&ctx.http, ":x: ImgFlip access is not enabled").await?;
+    }
+    Ok(None)
+}
+
 pub static VOTE: Command = Command {
     short: "Create a poll with two options",
     aliases: &[],
@@ -524,6 +568,7 @@ pub async fn send_help_command(ctx: &Context, msg: &Message, rest: &str) -> Comm
         "8ball" => EIGHTBALL,
         "wikipedia" => WIKIPEDIA,
         "xkcd" => XKCD,
+        "meme" => MEME,
         "vote" => VOTE,
         "poll" => POLL,
         _ => {
